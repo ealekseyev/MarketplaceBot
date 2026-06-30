@@ -1,0 +1,6 @@
+Metadata-Version: 2.4
+Name: fb-marketplace-bot
+Version: 0.1.0
+Summary: Facebook Marketplace inbox extraction scaffold
+Requires-Python: >=3.11
+Requires-Dist: playwright<2,>=1.46

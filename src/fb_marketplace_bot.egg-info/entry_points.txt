@@ -1,0 +1,2 @@
+[console_scripts]
+fb-marketplace = fb_marketplace.cli:main
