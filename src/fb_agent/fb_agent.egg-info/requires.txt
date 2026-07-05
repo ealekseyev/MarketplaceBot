@@ -1,3 +1,0 @@
-fb-store
-openai>=1.0
-pyyaml>=6

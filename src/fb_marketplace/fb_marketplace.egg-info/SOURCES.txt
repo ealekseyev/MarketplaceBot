@@ -1,7 +1,0 @@
-pyproject.toml
-fb_marketplace.egg-info/PKG-INFO
-fb_marketplace.egg-info/SOURCES.txt
-fb_marketplace.egg-info/dependency_links.txt
-fb_marketplace.egg-info/entry_points.txt
-fb_marketplace.egg-info/requires.txt
-fb_marketplace.egg-info/top_level.txt
