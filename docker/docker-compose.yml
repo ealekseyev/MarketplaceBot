@@ -1,0 +1,42 @@
+services:
+  fb-bot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: fb-bot:latest
+    env_file:
+      - ../.env
+    environment:
+      FB_STORE_PATH: /data/fb-bot.sqlite
+    volumes:
+      - browser-profile:/profile
+      - bot-data:/data
+    restart: unless-stopped
+    command:
+      - --user-data-dir
+      - /profile
+      - --telegram
+      - --poll-interval
+      - "60"
+
+  # One-shot interactive login to create or refresh the browser profile.
+  # Usage: docker compose -f docker/docker-compose.yml --profile setup run --rm browser-setup
+  browser-setup:
+    profiles: [setup]
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: fb-bot:latest
+    entrypoint: ["python", "scripts/create_browser_profile.py"]
+    command:
+      - --profile-dir
+      - /profile
+      - --force
+    volumes:
+      - browser-profile:/profile
+    stdin_open: true
+    tty: true
+
+volumes:
+  browser-profile:
+  bot-data:

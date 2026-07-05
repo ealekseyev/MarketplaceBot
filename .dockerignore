@@ -1,0 +1,15 @@
+.git
+.github
+.venv
+.vscode
+__pycache__
+*.egg-info
+.env
+.browser-profile
+.browser-profiles
+data
+debug
+fixtures
+terminals
+*.md
+!README.md
