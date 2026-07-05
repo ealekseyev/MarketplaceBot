@@ -241,8 +241,9 @@ class BotOrchestrator:
             logger.exception("Agent decision failed for chat %s", chat_id)
             return
 
+        chat_url = chat.summary.chat_url or summary.chat_url or build_chat_url(chat_id)
         logger.info("Chat %s: acting on %s", chat_id, action.value)
-        await self._act(session, chat_id, chat.chat_url or build_chat_url(chat_id), ctx, action, classification)
+        await self._act(session, chat_id, chat_url, ctx, action, classification)
 
     async def _act(
         self,

@@ -23,4 +23,4 @@ RUN mkdir -p /data /profile
 VOLUME ["/data", "/profile"]
 
 ENTRYPOINT ["fb-bot"]
-CMD ["--user-data-dir", "/profile", "--telegram", "--poll-interval", "60"]
+CMD ["--user-data-dir", "/profile", "--telegram", "--poll-interval", "10"]
