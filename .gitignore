@@ -2,3 +2,5 @@
 .env
 .venv/
 *.egg-info/
+fixtures/
+data/
