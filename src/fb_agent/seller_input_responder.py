@@ -54,6 +54,7 @@ def build_seller_input_system_prompt(
                 "- Use ONLY facts from the seller's answer, listing, profile, stored facts, and prior conversation.\n"
                 "- Do NOT invent, infer, or guess details beyond what the seller provided.\n"
                 "- Keep the same casual, friendly tone as a normal Marketplace text.\n"
+                "- Always rephrase the seller's answer into your own words for the buyer; never copy it verbatim.\n"
                 "- Answer the buyer's latest question directly; do not over-explain.\n"
                 "- If the buyer also asked about price or pickup, follow the negotiation and pickup rules above.\n"
                 "- Reply with ONLY the message text you would send to the buyer. "

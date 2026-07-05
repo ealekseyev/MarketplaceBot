@@ -18,7 +18,7 @@ from fb_agent import (
 from fb_agent.classifier import MessageAction
 from fb_marketplace import ChatDetail, ChatSummary, MarketplaceSession, MessageSender
 from fb_store import ChatStore
-from fb_telegram import TelegramClient
+from fb_telegram import TelegramClient, TelegramUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,22 @@ _ACTION_MAP = {
     MessageAction.NEED_SELLER_INPUT: AgentAction.NEED_SELLER_INPUT,
     MessageAction.HAND_OFF: AgentAction.HAND_OFF,
 }
+
+_TELEGRAM_ACTION_PREFIX = {
+    AgentAction.HAND_OFF: "[HAND_OFF]",
+    AgentAction.NEED_SELLER_INPUT: "[MORE INFO NEEDED]",
+}
+
+
+def _format_telegram_notification(action: AgentAction, summary_text: str, *, footer: str | None = None) -> str:
+    prefix = _TELEGRAM_ACTION_PREFIX.get(action)
+    if prefix is None:
+        body = summary_text.strip()
+    else:
+        body = f"{prefix}\n\n{summary_text.strip()}"
+    if footer:
+        return f"{body}\n\n{footer}"
+    return body
 
 
 class BotOrchestrator:
@@ -76,12 +92,22 @@ class BotOrchestrator:
             return
 
         updates = await self._telegram.get_updates(offset=self._telegram_update_offset, timeout=0)
+        if updates:
+            logger.debug("Telegram: received %d update(s), %d pending", len(updates), len(self._pending_by_telegram_msg))
+
         for update in updates:
             self._telegram_update_offset = update.update_id + 1
-            if update.reply_to_message_id is None or not update.text:
+            if not update.text:
+                logger.debug("Telegram: skipped update %d (no text)", update.update_id)
                 continue
-            pending = self._pending_by_telegram_msg.pop(update.reply_to_message_id, None)
+
+            pending_key, pending = self._match_pending_telegram_reply(update)
             if pending is None:
+                logger.debug(
+                    "Telegram: skipped update %d (reply_to=%s, no matching pending)",
+                    update.update_id,
+                    update.reply_to_message_id,
+                )
                 continue
 
             try:
@@ -91,6 +117,7 @@ class BotOrchestrator:
                 )
                 await session.send_message(pending.marketplace_chat_id, draft.text)
                 self._store.record_outbound(pending.marketplace_chat_id, draft.text)
+                del self._pending_by_telegram_msg[pending_key]
                 logger.info(
                     "Replied to %s after seller input via Telegram",
                     pending.marketplace_chat_id,
@@ -100,6 +127,25 @@ class BotOrchestrator:
                     "Failed to handle Telegram reply for chat %s",
                     pending.marketplace_chat_id,
                 )
+
+    def _match_pending_telegram_reply(
+        self,
+        update: TelegramUpdate,
+    ) -> tuple[int | None, PendingSellerInput | None]:
+        if update.reply_to_message_id is not None:
+            pending = self._pending_by_telegram_msg.get(update.reply_to_message_id)
+            if pending is not None:
+                return update.reply_to_message_id, pending
+
+        if len(self._pending_by_telegram_msg) == 1:
+            pending_key = next(iter(self._pending_by_telegram_msg))
+            logger.info(
+                "Telegram: treating plain message as reply to pending chat %s",
+                self._pending_by_telegram_msg[pending_key].marketplace_chat_id,
+            )
+            return pending_key, self._pending_by_telegram_msg[pending_key]
+
+        return None, None
 
     def _buyer_message_ready(self, chat: ChatDetail) -> bool:
         for message in reversed(chat.messages):
@@ -218,7 +264,12 @@ class BotOrchestrator:
             try:
                 logger.info("Chat %s: requesting seller input via Telegram", chat_id)
                 summary = self._summarizer.summarize(ctx, classification=classification)
-                message_id = await self._notify(summary.summary_text)
+                notify_text = _format_telegram_notification(
+                    AgentAction.NEED_SELLER_INPUT,
+                    summary.summary_text,
+                    footer="Reply to this message with your answer.",
+                )
+                message_id = await self._notify(notify_text)
                 if message_id is not None:
                     self._pending_by_telegram_msg[message_id] = PendingSellerInput(
                         marketplace_chat_id=chat_id,
@@ -234,7 +285,9 @@ class BotOrchestrator:
             try:
                 logger.info("Chat %s: handing off to seller and blacklisting", chat_id)
                 summary = self._summarizer.summarize(ctx, classification=classification)
-                await self._notify(summary.summary_text)
+                await self._notify(
+                    _format_telegram_notification(AgentAction.HAND_OFF, summary.summary_text)
+                )
                 self._store.blacklist_chat(chat_id, reason="hand_off")
                 logger.info("Chat %s: handoff complete", chat_id)
             except Exception:

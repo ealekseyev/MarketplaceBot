@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
-
-from fb_marketplace.env import load_env_file
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -11,6 +10,32 @@ DEFAULT_LOCAL_BASE_URL = "http://10.0.30.33:8080/v1"
 DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 DEFAULT_MODEL = "qwen3.6-27b-mtp"
 DEFAULT_LOCAL_API_KEY = "local"
+
+
+def _load_env_file(path: str) -> dict[str, str]:
+    env_path = Path(path)
+    if not env_path.exists():
+        return {}
+
+    values: dict[str, str] = {}
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            continue
+
+        if value and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+        elif " #" in value:
+            value = value.split(" #", 1)[0].rstrip()
+        values[key] = value
+
+    return values
 
 
 def _env_value(key: str, file_values: dict[str, str]) -> str | None:
@@ -36,7 +61,7 @@ def _first_env_value(
 
 def resolve_llm_settings(path: str = ".env") -> dict[str, str | bool]:
     """Resolve LLM provider settings from process env and a .env file."""
-    file_values = load_env_file(path)
+    file_values = _load_env_file(path)
 
     provider = (_first_env_value(("LLM_PROVIDER",), file_values, default="local") or "local").lower()
     if provider not in {"local", "openai"}:
@@ -67,10 +92,15 @@ def resolve_llm_settings(path: str = ".env") -> dict[str, str | bool]:
             api_key = DEFAULT_LOCAL_API_KEY
         enable_thinking = _first_env_value(("OPENAI_ENABLE_THINKING",), file_values, default="true")
 
+    thinking_enabled = enable_thinking.lower() in {"1", "true", "yes"}
+    if provider == "openai" and thinking_enabled:
+        logger.warning("OPENAI_ENABLE_THINKING is ignored for LLM_PROVIDER=openai")
+        thinking_enabled = False
+
     return {
         "provider": provider,
         "base_url": base_url or DEFAULT_LOCAL_BASE_URL,
         "model": model or DEFAULT_MODEL,
         "api_key": api_key,
-        "enable_thinking": enable_thinking.lower() in {"1", "true", "yes"},
+        "enable_thinking": thinking_enabled,
     }

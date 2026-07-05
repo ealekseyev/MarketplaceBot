@@ -5,6 +5,7 @@ description = "LLM reply logic for Facebook Marketplace bot"
 requires-python = ">=3.11"
 dependencies = [
   "fb-store",
+  "openai>=1.0",
   "pyyaml>=6",
 ]
 

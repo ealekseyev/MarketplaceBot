@@ -72,7 +72,9 @@ def _pickup_blurb(pickup_location: str | None) -> str | None:
     return (
         f"Pickup: Items are picked up {pickup_location}. "
         "Use this when buyers ask where to meet or how far you are. "
-        "Do not give your exact home address."
+        "Do not give your exact home address. "
+        "If you already stated the pickup location earlier in this conversation, do not mention it again "
+        "unless the buyer explicitly asks for the address, location, or where to pick up."
     )
 
 

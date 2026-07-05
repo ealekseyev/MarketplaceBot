@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import json
 import re
-import urllib.error
-import urllib.request
 from typing import Any
+
+from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
 
 from .config import AgentConfig
 
@@ -16,13 +15,22 @@ class LLMError(RuntimeError):
     pass
 
 
-def _extract_message_text(message: dict[str, Any]) -> str:
-    text = (message.get("content") or "").strip()
+def _extract_message_text(content: str | None) -> str:
+    text = (content or "").strip()
     if _THINK_CLOSE in text:
         text = text.rsplit(_THINK_CLOSE, 1)[-1].strip()
     if text.startswith(_THINK_OPEN):
         text = re.sub(r"^.*?(?:" + _THINK_CLOSE + "|$)", "", text, flags=re.DOTALL).strip()
     return text
+
+
+def _make_client(config: AgentConfig) -> OpenAI:
+    api_key = config.api_key or "not-needed"
+    return OpenAI(
+        base_url=config.base_url,
+        api_key=api_key,
+        timeout=config.timeout_s,
+    )
 
 
 def chat_completion(
@@ -31,47 +39,36 @@ def chat_completion(
     *,
     temperature: float | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    url = f"{config.base_url.rstrip('/')}/chat/completions"
-    payload: dict[str, Any] = {
+    client = _make_client(config)
+    request_kwargs: dict[str, Any] = {
         "model": config.model,
         "messages": messages,
         "temperature": config.temperature if temperature is None else temperature,
     }
-    if config.enable_thinking:
+    if config.provider == "local" and config.enable_thinking:
         extra_body: dict[str, Any] = {
             "enable_thinking": True,
             "chat_template_kwargs": {"enable_thinking": True},
         }
         if config.thinking_budget is not None:
             extra_body["thinking_budget"] = config.thinking_budget
-        payload["extra_body"] = extra_body
-    headers = {"Content-Type": "application/json"}
-    if config.api_key:
-        headers["Authorization"] = f"Bearer {config.api_key}"
-
-    request = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
+        request_kwargs["extra_body"] = extra_body
 
     try:
-        with urllib.request.urlopen(request, timeout=config.timeout_s) as response:
-            body = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise LLMError(f"LLM HTTP {exc.code}: {detail}") from exc
-    except urllib.error.URLError as exc:
+        response = client.chat.completions.create(**request_kwargs)
+    except APIStatusError as exc:
+        detail = exc.response.text if exc.response is not None else str(exc)
+        raise LLMError(f"LLM HTTP {exc.status_code}: {detail}") from exc
+    except (APITimeoutError, APIConnectionError) as exc:
         raise LLMError(f"LLM request failed: {exc}") from exc
 
-    try:
-        message = body["choices"][0]["message"]
-        text = _extract_message_text(message)
-    except (KeyError, IndexError, AttributeError) as exc:
-        raise LLMError(f"Unexpected LLM response shape: {body!r}") from exc
+    if not response.choices:
+        raise LLMError(f"Unexpected LLM response shape: {response!r}")
 
+    message = response.choices[0].message
+    text = _extract_message_text(message.content)
     if not text:
-        raise LLMError(f"LLM returned empty content: {body!r}")
+        raise LLMError(f"LLM returned empty content: {response!r}")
 
-    return text, body.get("usage") or {}
+    usage = response.usage.model_dump() if response.usage is not None else {}
+    return text, usage
