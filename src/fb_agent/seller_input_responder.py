@@ -6,6 +6,7 @@ from .config import AgentConfig
 from .llm import chat_completion
 from .models import ReplyContext, ReplyDraft
 from .profile import SellerProfile
+from .prompt_templates import render_prompt
 from .prompts import (
     _current_time_blurb,
     _identity_blurb,
@@ -14,14 +15,8 @@ from .prompts import (
     _pickup_blurb,
     _play_dumb_blurb,
     format_chat_messages,
+    stored_facts_blurb,
 )
-
-
-def _stored_facts_blurb(stored_facts: list[str] | None) -> str | None:
-    if not stored_facts:
-        return None
-    lines = "\n".join(f"- {fact}" for fact in stored_facts)
-    return f"Stored seller facts (confirmed by the human seller):\n{lines}"
 
 
 def build_seller_input_system_prompt(
@@ -40,26 +35,13 @@ def build_seller_input_system_prompt(
     pickup = _pickup_blurb(profile.pickup_location)
     if pickup:
         sections.append(pickup)
-    facts = _stored_facts_blurb(stored_facts)
+    facts = stored_facts_blurb(stored_facts)
     if facts:
         sections.append(facts)
     sections.extend(
         [
             _negotiation_blurb(ctx.listing, profile),
-            (
-                "The human seller just provided the factual answer below. "
-                "Write a buyer-facing reply that weaves this answer naturally into the conversation.\n"
-                f"Seller's answer: {seller_answer.strip()}\n"
-                "Rules:\n"
-                "- Use ONLY facts from the seller's answer, listing, profile, stored facts, and prior conversation.\n"
-                "- Do NOT invent, infer, or guess details beyond what the seller provided.\n"
-                "- Keep the same casual, friendly tone as a normal Marketplace text.\n"
-                "- Always rephrase the seller's answer into your own words for the buyer; never copy it verbatim.\n"
-                "- Answer the buyer's latest question directly; do not over-explain.\n"
-                "- If the buyer also asked about price or pickup, follow the negotiation and pickup rules above.\n"
-                "- Reply with ONLY the message text you would send to the buyer. "
-                "No quotes, no labels, no explanation."
-            ),
+            render_prompt("seller_input.task", seller_answer=seller_answer.strip()),
         ]
     )
     return "\n\n".join(sections)

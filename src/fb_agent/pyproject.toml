@@ -19,3 +19,6 @@ package-dir = {"fb_agent" = "."}
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["fb_agent*"]
+
+[tool.setuptools.package-data]
+fb_agent = ["agent.yaml", "prompts.yaml"]

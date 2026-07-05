@@ -17,6 +17,7 @@ from fb_agent import (
 )
 from fb_agent.classifier import MessageAction
 from fb_marketplace import ChatDetail, ChatSummary, MarketplaceSession, MessageSender
+from fb_marketplace.helpers import build_chat_url
 from fb_store import ChatStore
 from fb_telegram import TelegramClient, TelegramUpdate
 
@@ -42,12 +43,19 @@ _TELEGRAM_ACTION_PREFIX = {
 }
 
 
-def _format_telegram_notification(action: AgentAction, summary_text: str, *, footer: str | None = None) -> str:
+def _format_telegram_notification(
+    action: AgentAction,
+    summary_text: str,
+    *,
+    chat_url: str,
+    footer: str | None = None,
+) -> str:
     prefix = _TELEGRAM_ACTION_PREFIX.get(action)
-    if prefix is None:
-        body = summary_text.strip()
-    else:
-        body = f"{prefix}\n\n{summary_text.strip()}"
+    header_parts: list[str] = []
+    if prefix:
+        header_parts.append(prefix)
+    header_parts.append(chat_url.strip())
+    body = "\n".join(header_parts) + f"\n\n{summary_text.strip()}"
     if footer:
         return f"{body}\n\n{footer}"
     return body
@@ -234,12 +242,13 @@ class BotOrchestrator:
             return
 
         logger.info("Chat %s: acting on %s", chat_id, action.value)
-        await self._act(session, chat_id, ctx, action, classification)
+        await self._act(session, chat_id, chat.chat_url or build_chat_url(chat_id), ctx, action, classification)
 
     async def _act(
         self,
         session: MarketplaceSession,
         chat_id: str,
+        chat_url: str,
         ctx: ReplyContext,
         action: AgentAction,
         classification: ClassificationResult,
@@ -267,6 +276,7 @@ class BotOrchestrator:
                 notify_text = _format_telegram_notification(
                     AgentAction.NEED_SELLER_INPUT,
                     summary.summary_text,
+                    chat_url=chat_url,
                     footer="Reply to this message with your answer.",
                 )
                 message_id = await self._notify(notify_text)
@@ -286,7 +296,11 @@ class BotOrchestrator:
                 logger.info("Chat %s: handing off to seller and blacklisting", chat_id)
                 summary = self._summarizer.summarize(ctx, classification=classification)
                 await self._notify(
-                    _format_telegram_notification(AgentAction.HAND_OFF, summary.summary_text)
+                    _format_telegram_notification(
+                        AgentAction.HAND_OFF,
+                        summary.summary_text,
+                        chat_url=chat_url,
+                    )
                 )
                 self._store.blacklist_chat(chat_id, reason="hand_off")
                 logger.info("Chat %s: handoff complete", chat_id)

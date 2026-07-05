@@ -110,6 +110,26 @@ class ListingDetail:
             },
         }
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ListingDetail:
+        location = data.get("location") or {}
+        url = data.get("url")
+        if not url and data.get("id"):
+            url = f"https://www.facebook.com/marketplace/item/{data['id']}"
+        if not url:
+            raise ValueError("listing dict must include url or id")
+
+        return cls(
+            url=url,
+            title=data.get("title"),
+            description=data.get("description"),
+            price=data.get("price"),
+            condition=data.get("condition"),
+            seller_name=data.get("seller_name"),
+            location_city=location.get("city"),
+            location_state=location.get("state"),
+        )
+
 
 @dataclass(slots=True)
 class ChatDetail:

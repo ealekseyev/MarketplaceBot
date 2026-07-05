@@ -7,6 +7,7 @@ from .config import AgentConfig
 from .llm import chat_completion
 from .models import ClassificationResult, HandoffSummary, ReplyContext
 from .profile import SellerProfile
+from .prompt_templates import render_prompt
 from .prompts import _listing_blurb
 
 
@@ -35,28 +36,21 @@ def build_handoff_system_prompt(
 ) -> str:
     buyer_question = _buyer_question(ctx, classification=classification)
     sections = [
-        (
-            "You summarize Facebook Marketplace buyer conversations for a human seller's Telegram notification. "
-            "Write a concise, scannable message the seller can read quickly on their phone."
-        ),
+        render_prompt("handoff.intro"),
         _listing_blurb(ctx.listing),
     ]
     if ctx.buyer_name:
-        sections.append(f"Buyer name: {ctx.buyer_name}")
+        sections.append(render_prompt("handoff.buyer_name", buyer_name=ctx.buyer_name))
     if buyer_question:
-        sections.append(f"Buyer's question / request: {buyer_question}")
+        sections.append(render_prompt("handoff.buyer_question", buyer_question=buyer_question))
     if classification and classification.reason:
-        sections.append(f"Classifier note: {classification.reason}")
+        sections.append(
+            render_prompt("handoff.classifier_note", classifier_reason=classification.reason)
+        )
     sections.append(
-        (
-            "Conversation history:\n"
-            f"{_format_conversation(ctx.messages, ctx)}\n\n"
-            "Write a short Telegram-ready summary for the seller. Include:\n"
-            "- What listing (title and price)\n"
-            "- What the buyer is asking or wants\n"
-            "- One or two lines of helpful context from the conversation if relevant\n"
-            "Use plain text. No markdown. Keep it under ~6 lines. "
-            "Reply with ONLY the notification text."
+        render_prompt(
+            "handoff.instructions",
+            conversation=_format_conversation(ctx.messages, ctx),
         )
     )
     return "\n\n".join(sections)
@@ -75,7 +69,7 @@ def build_handoff_messages(
         },
         {
             "role": "user",
-            "content": "Summarize this conversation for the seller's Telegram notification.",
+            "content": render_prompt("handoff.user"),
         },
     ]
 

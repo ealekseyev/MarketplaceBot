@@ -28,6 +28,7 @@ from .helpers import (
     parse_listing_location,
     parse_marketplace_threads_from_graphql,
 )
+from .listing_cache import ListingCache
 from .models import ChatDetail, ChatMessage, ChatSummary, ListingDetail, MessageSender, SessionConfig
 from .timeparse import age_seconds, first_timestamp_in_text, parse_relative_timestamp
 
@@ -148,6 +149,12 @@ class FacebookMarketplaceClient:
         self._playwright: Playwright | None = None
         self._context: BrowserContext | None = None
         self._page: Page | None = None
+        self._listing_cache: ListingCache | None = None
+
+    def _get_listing_cache(self) -> ListingCache:
+        if self._listing_cache is None:
+            self._listing_cache = ListingCache()
+        return self._listing_cache
 
     async def __aenter__(self) -> "FacebookMarketplaceClient":
         await self.start()
@@ -202,6 +209,9 @@ class FacebookMarketplaceClient:
         self._page = page
 
     async def close(self) -> None:
+        if self._listing_cache is not None:
+            self._listing_cache.close()
+            self._listing_cache = None
         if self._page is not None:
             try:
                 await self._page.goto("about:blank", wait_until="commit", timeout=2_000)
@@ -459,11 +469,23 @@ class FacebookMarketplaceClient:
         )
 
     async def get_listing(self, listing_url: str) -> ListingDetail:
-        page = self._require_page()
         normalized_url = normalize_listing_url(listing_url)
         if normalized_url is None:
             raise ValueError("listing_url must be non-empty")
 
+        listing_id = extract_listing_id(normalized_url)
+        if listing_id:
+            cached = self._get_listing_cache().get(listing_id)
+            if cached is not None:
+                logger.info(
+                    "get_listing: cache hit for %s (title=%r)",
+                    listing_id,
+                    cached.title,
+                )
+                return cached
+            logger.debug("get_listing: cache miss for %s", listing_id)
+
+        page = self._require_page()
         logger.info("get_listing: navigating to %s", normalized_url)
         await self._open_url_with_auth(page, normalized_url, wait_until="commit")
         if not _is_marketplace_listing_url(page.url, normalized_url):
@@ -482,7 +504,7 @@ class FacebookMarketplaceClient:
 
         location_city, location_state = parse_listing_location(raw.get("locationLine"))
 
-        return ListingDetail(
+        detail = ListingDetail(
             url=normalized_url,
             title=raw.get("title"),
             description=raw.get("description"),
@@ -492,6 +514,10 @@ class FacebookMarketplaceClient:
             location_city=location_city,
             location_state=location_state,
         )
+        if listing_id:
+            self._get_listing_cache().put(listing_id, detail)
+            logger.debug("get_listing: cached %s", listing_id)
+        return detail
 
     async def get_chat_listing(self, chat_id: str) -> ListingDetail | None:
         detail = await self.get_chat(chat_id)

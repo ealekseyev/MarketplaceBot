@@ -9,7 +9,8 @@ from .config import AgentConfig
 from .llm import LLMError, chat_completion
 from .models import ChatMessageInput, ClassificationResult, ReplyContext
 from .profile import SellerProfile
-from .prompts import _listing_blurb, _pickup_blurb, listing_price_is_firm
+from .prompt_templates import render_prompt
+from .prompts import _listing_blurb, _pickup_blurb, listing_price_is_firm, stored_facts_blurb
 
 _CLASSIFIER_TEMPERATURE = 0.1
 _VALID_ACTIONS = frozenset({"auto_reply", "need_seller_input", "hand_off"})
@@ -18,6 +19,12 @@ _HAND_OFF_PATTERNS = (
     re.compile(r"\b(call|phone|text)\s+me\b", re.I),
     re.compile(r"\b(phone|cell|mobile)\s*(#|number)?\b", re.I),
     re.compile(r"\bvideo\s+call\b", re.I),
+    re.compile(r"\bwhat\s+time\b", re.I),
+    re.compile(r"\bwhen\b.*\b(pick\s*up|pickup|meet|come\s+(by|get)|grab)\b", re.I),
+    re.compile(r"\b(pick\s*up|pickup|meet)\b.*\b(when|today|tomorrow|tonight)\b", re.I),
+    re.compile(r"\bcan\s+(we|i)\s+meet\b", re.I),
+    re.compile(r"\bmeet\s*up\b", re.I),
+    re.compile(r"\bschedule\b.*\b(pick\s*up|pickup|meet)\b", re.I),
 )
 
 
@@ -47,13 +54,6 @@ def _heuristic_action(message: str) -> MessageAction | None:
     return None
 
 
-def _stored_facts_blurb(stored_facts: list[str] | None) -> str | None:
-    if not stored_facts:
-        return None
-    lines = "\n".join(f"- {fact}" for fact in stored_facts)
-    return f"Stored seller facts (confirmed by the human seller):\n{lines}"
-
-
 def _format_conversation(messages: list[ChatMessageInput], ctx: ReplyContext) -> str:
     if not messages:
         return "(no prior messages)"
@@ -73,61 +73,29 @@ def build_classifier_system_prompt(
     stored_facts: list[str] | None = None,
 ) -> str:
     sections = [
-        (
-            "You classify buyer messages for a Facebook Marketplace auto-reply bot. "
-            "You will receive the full conversation history plus the latest buyer message "
-            "to evaluate separately. Decide whether the bot can reply on its own, needs "
-            "the human seller to provide missing facts, or should hand off to the human."
-        ),
+        render_prompt("classifier.intro"),
         _listing_blurb(ctx.listing),
     ]
     pickup = _pickup_blurb(profile.pickup_location)
     if pickup:
         sections.append(pickup)
-    facts = _stored_facts_blurb(stored_facts)
+    facts = stored_facts_blurb(stored_facts)
     if facts:
         sections.append(facts)
     if listing_price_is_firm(ctx.listing):
-        sections.append(
-            "Pricing: The listing description says the price is firm / non-negotiable. "
-            "Price-offer messages can be auto_reply — the bot should decline to negotiate."
-        )
-    sections.append(
-        (
-            "Choose exactly one action for the LATEST buyer message:\n"
-            "- auto_reply: enough information exists in the listing, seller profile, stored facts, "
-            "OR prior conversation (including seller replies already sent) to answer confidently "
-            "without guessing.\n"
-            "- need_seller_input: the latest message asks for specific facts that are NOT available "
-            "anywhere in context — do not guess (vehicle fitment/source, part numbers, exact "
-            "condition details, included accessories, measurements, history).\n"
-            "- hand_off: the buyer wants a phone/video call, complex meetup coordination beyond "
-            "a simple pickup area, or something that clearly needs direct human judgment.\n"
-            "\n"
-            "Rules:\n"
-            "- Read the ENTIRE conversation, not just the latest message. Prior seller answers count.\n"
-            "- Price offers, 'still available?', and pickup-area questions → auto_reply when covered.\n"
-            "- If a prior seller message already answered the question, choose auto_reply.\n"
-            "- If answering the latest message would require inventing or inferring facts → need_seller_input.\n"
-            "- Summarize the unanswered factual question in `question` when action is need_seller_input.\n"
-            "- Respond with ONLY valid JSON, no markdown:\n"
-            '{"action":"auto_reply|need_seller_input|hand_off","reason":"...","question":null}'
-        )
-    )
+        sections.append(render_prompt("classifier.firm_pricing_note"))
+    sections.append(render_prompt("classifier.actions"))
     return "\n\n".join(sections)
 
 
 def build_classifier_user_prompt(ctx: ReplyContext, latest_message: str) -> str:
     prior_messages, _latest = _split_latest_buyer(ctx)
     buyer_label = ctx.buyer_name or "Buyer"
-    return (
-        "Full conversation history (prior messages):\n"
-        f"{_format_conversation(prior_messages, ctx)}\n\n"
-        f"Latest buyer message to classify:\n"
-        f"{buyer_label}: {latest_message}\n\n"
-        "Given the listing, seller profile, stored facts, and full conversation above: "
-        "is there enough information to confidently answer the latest buyer message "
-        "without guessing?"
+    return render_prompt(
+        "classifier.user",
+        prior_conversation=_format_conversation(prior_messages, ctx),
+        buyer_label=buyer_label,
+        latest_message=latest_message,
     )
 
 
@@ -219,7 +187,7 @@ class MessageClassifier:
         if heuristic is MessageAction.HAND_OFF:
             return ClassificationResult(
                 action=MessageAction.HAND_OFF.value,
-                reason="Buyer asked for phone or direct contact.",
+                reason="Buyer message requires human handoff (scheduling or direct contact).",
                 question=None,
                 model=self._config.model,
             )
