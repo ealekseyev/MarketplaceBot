@@ -1,8 +1,11 @@
 # fb-bot
 
  &nbsp;&nbsp;&nbsp;&nbsp;This repo is all the code for a system which automates replying to flaky, annoying prospective buyers on Facebook Marketplace. I got sick of having to reply to 50 "Is this still available?" messages every day, so I decided to automate 80% of the process.
+
  &nbsp;&nbsp;&nbsp;&nbsp;This system uses an LLM with a few subagents to reply to customer questions and negotiate on price before sending me a telegram message once the buyer has proven to be reasonably serious; from then on the bot marks that conversation as done and does not reply anymore, and I can talk meeting details with the buyer.
+
  &nbsp;&nbsp;&nbsp;&nbsp;This project was proudly vibe coded in about 5 (leisurely) hours. I had a cursor membership left over fomr university so decided to depart from my usual more hands-on programming methodology and gave it a try.
+ 
  &nbsp;&nbsp;&nbsp;&nbsp;There are quite a few safety considerations I did bake in, such as refusal to answer unrelated questions, prompt injection flagging, and a few others. It also just straight up plays dumb if someone accuses the bot of being an llm.
 
 ## Layout at `src/`
