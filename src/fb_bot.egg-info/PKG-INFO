@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: fb-bot
+Version: 0.1.0
+Summary: Facebook Marketplace bot — monorepo orchestrator
+Requires-Python: >=3.11
+Requires-Dist: fb-marketplace
+Requires-Dist: fb-store
+Requires-Dist: fb-agent
+Requires-Dist: fb-telegram

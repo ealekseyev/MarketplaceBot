@@ -1,0 +1,9 @@
+__init__.py
+pyproject.toml
+store.py
+./__init__.py
+./store.py
+fb_store.egg-info/PKG-INFO
+fb_store.egg-info/SOURCES.txt
+fb_store.egg-info/dependency_links.txt
+fb_store.egg-info/top_level.txt

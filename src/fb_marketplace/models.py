@@ -5,7 +5,6 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-
 class MessageSender(StrEnum):
     BUYER = "buyer"
     SELLER = "seller"
@@ -22,9 +21,12 @@ class SessionConfig:
     scroll_pause_ms: int = 750
     facebook_email: str | None = None
     facebook_password: str | None = None
+    manual_login: bool = False
+    pause_on_auth_failure: bool = False
+    manual_login_check_interval_ms: int = 2_000
     facebook_home_url: str = "https://www.facebook.com/"
     facebook_login_url: str = "https://www.facebook.com/login"
-    marketplace_inbox_url: str = "https://www.facebook.com/marketplace/inbox"
+    marketplace_inbox_url: str = "https://www.facebook.com/marketplace/inbox?targetTab=SELLER"
 
 
 @dataclass(slots=True)
@@ -40,9 +42,27 @@ class ChatSummary:
     buyer_name: str | None = None
     listing_name: str | None = None
     listing_url: str | None = None
+    raw_text_parts: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        from .helpers import extract_listing_id
+
+        return {
+            "buyer_name": self.buyer_name,
+            "chat_id": self.chat_id,
+            "chat_url": self.chat_url,
+            "latest_message": {
+                "sender": self.latest_message_sender,
+                "sent_at": self.latest_message_at.isoformat() if self.latest_message_at else None,
+                "read_by_me": not self.unread,
+                "preview": self.latest_message_preview,
+            },
+            "listing": {
+                "id": extract_listing_id(self.listing_url),
+                "url": self.listing_url,
+                "name": self.listing_name,
+            },
+        }
 
 
 @dataclass(slots=True)
@@ -55,22 +75,40 @@ class ChatMessage:
     age_seconds: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return {
+            "sender": self.sender,
+            "sent_at": self.sent_at.isoformat() if self.sent_at else None,
+            "text": self.text,
+        }
 
 
 @dataclass(slots=True)
 class ListingDetail:
     url: str
-    canonical_url: str | None = None
     title: str | None = None
     description: str | None = None
-    price_text: str | None = None
-    location_text: str | None = None
-    seller_notes: str | None = None
-    raw_metadata: dict[str, str] = field(default_factory=dict)
+    price: str | None = None
+    condition: str | None = None
+    seller_name: str | None = None
+    location_city: str | None = None
+    location_state: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        from .helpers import extract_listing_id
+
+        return {
+            "id": extract_listing_id(self.url),
+            "url": self.url,
+            "title": self.title,
+            "description": self.description,
+            "price": self.price,
+            "condition": self.condition,
+            "seller_name": self.seller_name,
+            "location": {
+                "city": self.location_city,
+                "state": self.location_state,
+            },
+        }
 
 
 @dataclass(slots=True)
@@ -82,4 +120,16 @@ class ChatDetail:
     messages: list[ChatMessage] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        from .helpers import extract_listing_id
+
+        return {
+            "chat_id": self.summary.chat_id,
+            "chat_url": self.summary.chat_url,
+            "buyer_name": self.buyer_name,
+            "listing": {
+                "id": extract_listing_id(self.listing_url),
+                "name": self.listing_name,
+                "url": self.listing_url,
+            },
+            "messages": [message.to_dict() for message in self.messages],
+        }

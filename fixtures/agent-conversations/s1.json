@@ -1,0 +1,30 @@
+{
+  "buyer_name": "Shawn",
+  "listing": {
+    "condition": "Used - Good",
+    "description": "700 dollars firm - driver quality mopar bench seat.",
+    "location_city": "San Jose",
+    "location_state": "CA",
+    "price": "$700",
+    "title": "1970 mopar bench seat"
+  },
+  "messages": [
+    {
+      "sender": "buyer",
+      "sent_at": null,
+      "text": "Do you know what it's out of? Like a duster or charger? Thanks"
+    },
+    {
+      "sender": "seller",
+      "sent_at": null,
+      "text": "its from a duster"
+    },
+    {
+      "sender": "buyer",
+      "sent_at": null,
+      "text": "cool could you do 600"
+    }
+  ],
+  "name": "s1",
+  "seller_name": "Dennis"
+}

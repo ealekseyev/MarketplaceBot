@@ -1,14 +1,17 @@
 [project]
-name = "fb-marketplace-bot"
+name = "fb-bot"
 version = "0.1.0"
-description = "Facebook Marketplace inbox extraction scaffold"
+description = "Facebook Marketplace bot — monorepo orchestrator"
 requires-python = ">=3.11"
 dependencies = [
-  "playwright>=1.46,<2",
+  "fb-marketplace",
+  "fb-store",
+  "fb-agent",
+  "fb-telegram",
 ]
 
 [project.scripts]
-fb-marketplace = "fb_marketplace.cli:main"
+fb-bot = "main:main"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -16,6 +19,4 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
+py-modules = ["main", "orchestrator", "adapters"]

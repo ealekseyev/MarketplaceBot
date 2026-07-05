@@ -1,0 +1,71 @@
+{
+  "name": "chat_2131486027397586",
+  "chatId": "2131486027397586",
+  "url": "https://www.facebook.com/messages/t/2131486027397586",
+  "loaded": true,
+  "scroll": {
+    "passes": 3,
+    "stableAtTop": true,
+    "scrollerFound": true,
+    "lastMetrics": {
+      "top": 0,
+      "height": 557
+    }
+  },
+  "strategyCounts": {
+    "aria_message": 4,
+    "data_message_id": 4,
+    "role_row": 0,
+    "role_listitem": 0,
+    "unique_entries": 8
+  },
+  "totalAriaMessages": 4,
+  "realMessages": 2,
+  "systemMessages": 2,
+  "systemPatterns": [
+    "Enter, Message sent Thursday 2:38pm by Shawn: Shawn is waiting for your response.",
+    "Enter, Message sent Thursday 8:28am by Shawn: Shawn started this chat."
+  ],
+  "chronologicalSample": [
+    {
+      "y": 388,
+      "sender": "seller",
+      "timestamp": null,
+      "text": "Enter, Message sent Thursday 8:28am by Shawn: Shawn started this chat.",
+      "system": true
+    },
+    {
+      "y": 428,
+      "sender": "seller",
+      "timestamp": null,
+      "text": "Enter, Message sent Thursday 8:28am by Shawn: Do you know what it's out of? Like a duster or charger? Thanks \ud83e\udd19\ud83c\udffc",
+      "system": false
+    },
+    {
+      "y": 508,
+      "sender": "seller",
+      "timestamp": null,
+      "text": "Enter, Message sent Thursday 8:28am by Shawn",
+      "system": false
+    },
+    {
+      "y": 724,
+      "sender": "seller",
+      "timestamp": null,
+      "text": "Enter, Message sent Thursday 2:38pm by Shawn: Shawn is waiting for your response.",
+      "system": true
+    }
+  ],
+  "realMessageSample": [
+    {
+      "sender": "seller",
+      "timestamp": null,
+      "text": "Enter, Message sent Thursday 8:28am by Shawn: Do you know what it's out of? Like a duster or charger? Thanks \ud83e\udd19\ud83c\udffc"
+    },
+    {
+      "sender": "seller",
+      "timestamp": null,
+      "text": "Enter, Message sent Thursday 8:28am by Shawn"
+    }
+  ]
+}

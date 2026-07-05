@@ -1,0 +1,20 @@
+[project]
+name = "fb-agent"
+version = "0.1.0"
+description = "LLM reply logic for Facebook Marketplace bot"
+requires-python = ">=3.11"
+dependencies = [
+  "fb-store",
+  "pyyaml>=6",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"fb_agent" = "."}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["fb_agent*"]

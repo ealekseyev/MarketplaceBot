@@ -1,0 +1,10 @@
+seller_name: Dennis
+
+# Area description for pickup — used when buyers ask where to meet.
+pickup_location: near Baker Elementary School in Saratoga/San Jose
+
+negotiation:
+  # First counter-offer when a buyer lowballs (% off listed price).
+  first_discount_pct: 5
+  # Absolute floor (% off listed price). Never go below this.
+  max_discount_pct: 10

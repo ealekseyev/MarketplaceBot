@@ -1,0 +1,9 @@
+__init__.py
+client.py
+pyproject.toml
+./__init__.py
+./client.py
+fb_telegram.egg-info/PKG-INFO
+fb_telegram.egg-info/SOURCES.txt
+fb_telegram.egg-info/dependency_links.txt
+fb_telegram.egg-info/top_level.txt

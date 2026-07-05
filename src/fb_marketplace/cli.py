@@ -16,27 +16,30 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Facebook Marketplace extraction scaffold")
     parser.add_argument("command", choices=["inbox", "chat", "listing"])
     parser.add_argument("value", nargs="?", help="chat id for 'chat' or listing url for 'listing'")
-    parser.add_argument("--user-data-dir", required=True, help="persistent Chromium profile directory")
+    parser.add_argument("--user-data-dir", default="./.browser-profile", help="persistent Chromium profile directory")
     parser.add_argument("--env-file", default=".env", help="path to .env containing Facebook credentials")
     parser.add_argument("--headful", action="store_true", help="run Chromium with a visible window")
+    parser.add_argument("--manual-login", action="store_true", help="pause in a visible browser so you can complete Facebook login/CAPTCHA manually")
     parser.add_argument("--timeout-ms", type=int, default=15_000)
+    parser.add_argument("--limit", type=int, default=None, help="max chats to return for inbox")
     args = parser.parse_args()
 
     facebook_email, facebook_password = facebook_credentials_from_env(args.env_file)
     config = SessionConfig(
         user_data_dir=args.user_data_dir,
-        headless=not args.headful,
+        headless=not (args.headful or args.manual_login),
         timeout_ms=args.timeout_ms,
         facebook_email=facebook_email,
         facebook_password=facebook_password,
+        manual_login=args.manual_login,
     )
-    asyncio.run(_run(args.command, args.value, config))
+    asyncio.run(_run(args.command, args.value, config, args.limit))
 
 
-async def _run(command: str, value: str | None, config: SessionConfig) -> None:
+async def _run(command: str, value: str | None, config: SessionConfig, limit: int | None) -> None:
     async with FacebookMarketplaceClient(config) as client:
         if command == "inbox":
-            result = [chat.to_dict() for chat in await client.list_chats()]
+            result = [chat.to_dict() for chat in await client.list_chats(limit=limit)]
         elif command == "chat":
             if not value:
                 raise SystemExit("chat requires a chat id")
@@ -59,3 +62,7 @@ def _json_ready(value: Any) -> Any:
     if isinstance(value, list):
         return [_json_ready(item) for item in value]
     return value
+
+
+if __name__ == "__main__":
+    main()
