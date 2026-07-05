@@ -178,3 +178,5 @@ PYTHONPATH=src python -m main --user-data-dir ./.browser-profile --telegram --he
 Extraction SDK and CLI details: [src/fb_marketplace/SDK.md](src/fb_marketplace/SDK.md)
 
 Deeper module notes: [plan-modules.md](plan-modules.md)
+
+Docker deployment: [docker/README.md](docker/README.md)
