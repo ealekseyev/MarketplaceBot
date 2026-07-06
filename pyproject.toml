@@ -5,11 +5,13 @@ description = "Facebook Marketplace bot — monorepo orchestrator"
 requires-python = ">=3.11"
 dependencies = [
   "fb-marketplace",
-  "fb-marketplace-mock",
   "fb-store",
   "fb-agent",
   "fb-telegram",
 ]
+
+[project.optional-dependencies]
+mock = ["fb-marketplace-mock"]
 
 [project.scripts]
 fb-bot = "main:main"

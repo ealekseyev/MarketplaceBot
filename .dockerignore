@@ -11,5 +11,6 @@ data
 debug
 fixtures
 terminals
+scripts
 *.md
 !README.md

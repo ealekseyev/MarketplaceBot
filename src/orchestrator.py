@@ -182,13 +182,14 @@ class BotOrchestrator:
         logger.info("Chat %s: store gate allowed", chat_id)
 
         if not self._buyer_message_ready(chat):
-            logger.debug(
+            logger.info(
                 "Chat %s: buyer message not ready (min age %ss); skipping",
                 chat_id,
                 self._reply_delay_seconds,
             )
             return
         logger.info("Chat %s: buyer message ready for reply", chat_id)
+        await session.mark_read(chat_id)
 
         logger.info("Chat %s: building reply context", chat_id)
         ctx = build_reply_context(chat, listing, agent_config=self._agent_config)

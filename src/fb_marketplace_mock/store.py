@@ -148,6 +148,14 @@ class MockStore:
         rows = self._conn.execute(query).fetchall()
         return [self._row_to_summary(row) for row in rows]
 
+    def mark_read(self, chat_id: str) -> None:
+        """Clear inbox unread — seller opened the thread."""
+        self._conn.execute(
+            "UPDATE chats SET unread = 0 WHERE chat_id = ?",
+            (chat_id,),
+        )
+        self._conn.commit()
+
     def get_chat(self, chat_id: str) -> ChatDetail:
         row = self._conn.execute(
             "SELECT * FROM chats WHERE chat_id = ?",

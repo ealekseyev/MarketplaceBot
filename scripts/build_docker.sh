@@ -17,4 +17,4 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 IMAGE="${DOCKERHUB_USER}/fb-bot:latest"
 
 sudo docker build -f docker/Dockerfile -t "${IMAGE}" "$@" .
-sudo docker push "${IMAGE}"
+docker push "${IMAGE}"

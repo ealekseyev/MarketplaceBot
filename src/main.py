@@ -49,11 +49,16 @@ async def async_main(args: argparse.Namespace) -> None:
     else:
         from fb_marketplace import MarketplaceSession, SessionConfig, facebook_credentials_from_env
 
+    if args.reply_delay_seconds is not None:
+        reply_delay = args.reply_delay_seconds
+    else:
+        reply_delay = 0.0
+
     logger.info(
         "Startup config: poll_interval=%.1fs, reply_delay=%.1fs, only_chat_id=%s, "
         "telegram=%s, once=%s, headless=%s, mock_fb=%s",
         args.poll_interval,
-        args.reply_delay_seconds,
+        reply_delay,
         args.only_chat_id or "(all)",
         "on" if args.telegram else "off",
         args.once,
@@ -101,7 +106,7 @@ async def async_main(args: argparse.Namespace) -> None:
         seller_input=SellerInputResponder(agent_config),
         summarizer=HandoffSummarizer(agent_config),
         telegram=telegram,
-        reply_delay_seconds=args.reply_delay_seconds,
+        reply_delay_seconds=reply_delay,
         only_chat_id=args.only_chat_id,
     )
 
@@ -137,8 +142,8 @@ def main() -> None:
     parser.add_argument(
         "--reply-delay-seconds",
         type=float,
-        default=120.0,
-        help="Minimum age of latest buyer message before auto-reply (default 120)",
+        default=None,
+        help="Min age of latest buyer message before reply (default 0)",
     )
     parser.add_argument(
         "--telegram",

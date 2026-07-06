@@ -60,3 +60,6 @@ class MarketplaceSession:
     async def send_message(self, chat_id: str, text: str) -> None:
         logger.debug("MarketplaceSession.send_message(chat_id=%s, chars=%d)", chat_id, len(text))
         return await self._client.send_message(chat_id, text)
+
+    async def mark_read(self, chat_id: str) -> None:
+        await self._client.mark_read(chat_id)

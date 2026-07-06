@@ -33,7 +33,6 @@ RUN pip install --no-cache-dir \
 
 # Application source — only this layer rebuilds on typical code changes.
 COPY src ./src
-COPY scripts ./scripts
 
 ENV PYTHONUNBUFFERED=1 \
     FB_STORE_PATH=/data/fb-bot.sqlite

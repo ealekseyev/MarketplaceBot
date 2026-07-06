@@ -73,3 +73,6 @@ class FacebookMarketplaceClient:
     async def send_message(self, chat_id: str, text: str) -> None:
         logger.info("send_message: start (chat_id=%s, chars=%d)", chat_id, len(text))
         self._store.send_seller_message(chat_id, text)
+
+    async def mark_read(self, chat_id: str) -> None:
+        self._store.mark_read(chat_id)
