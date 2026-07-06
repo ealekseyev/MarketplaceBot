@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Demo scenarios for fb_store SQLite ChatStore."""
+"""Demo scenarios for fb_store ChatPolicy."""
 
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -10,7 +11,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from fb_store import AgenticAccessDecision, ChatStore, OutboundMessage
+from fb_agent import ClassificationResult, ReplyContext
+from fb_agent.models import ChatMessageInput, ListingInput
+from fb_store import AgenticAccessDecision, ChatPolicy, Database, OutboundMessage
 
 
 @dataclass
@@ -27,7 +30,8 @@ def _assert_decision(decision: AgenticAccessDecision, *, allowed: bool, reason: 
 def run_scenarios(db_path: Path) -> None:
     print(f"Using database: {db_path}")
 
-    with ChatStore(db_path) as store:
+    with Database(db_path) as db:
+        store = ChatPolicy(db)
         chat_id = "chat-new"
 
         buyer_only = [Msg(sender="buyer", text="Is this still available?")]
@@ -95,6 +99,54 @@ def run_scenarios(db_path: Path) -> None:
         store.log_outbound(OutboundMessage(chat_id="chat-log-alias", text="Alias path works"))
         assert store.has_logged_outbound("chat-log-alias", "Alias path works")
         print("OK log_outbound alias")
+
+        waiting_id = "chat-waiting"
+        ctx = ReplyContext(
+            chat_id=waiting_id,
+            buyer_name="Alex",
+            messages=[ChatMessageInput(sender="buyer", text="Does it fit a 1970 cuda?")],
+            listing=ListingInput(title="Bench seat", price="$700"),
+        )
+        classification = ClassificationResult(
+            action="need_seller_input",
+            reason="missing_fitment",
+            question="Will this fit a 1970 cuda?",
+        )
+        store.mark_waiting_telegram(
+            waiting_id,
+            42,
+            json.dumps(ctx.to_dict()),
+            json.dumps(classification.to_dict()),
+        )
+        assert store.has_waiting_telegram()
+        decision = store.should_allow_agentic_response(waiting_id, buyer_only)
+        _assert_decision(decision, allowed=False, reason="waiting_telegram")
+        print("OK waiting_telegram blocks agentic response")
+
+        consumed = store.consume_telegram_reply(42)
+        assert consumed is not None
+        assert consumed.chat_id == waiting_id
+        restored_ctx = ReplyContext.from_dict(json.loads(consumed.pending_context))
+        restored_classification = ClassificationResult.from_dict(
+            json.loads(consumed.pending_classification),
+        )
+        assert restored_ctx.chat_id == waiting_id
+        assert restored_classification.action == "need_seller_input"
+        assert not store.has_waiting_telegram()
+        print("OK consume_telegram_reply by message id")
+
+        fallback_id = "chat-fallback"
+        store.mark_waiting_telegram(
+            fallback_id,
+            99,
+            json.dumps(ctx.to_dict()),
+            json.dumps(classification.to_dict()),
+        )
+        consumed_fallback = store.consume_telegram_reply(None)
+        assert consumed_fallback is not None
+        assert consumed_fallback.chat_id == fallback_id
+        assert not store.has_waiting_telegram()
+        print("OK consume_telegram_reply fallback with single waiting row")
 
     print("All fb_store scenarios passed.")
 

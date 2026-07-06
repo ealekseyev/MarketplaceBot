@@ -79,9 +79,8 @@ docker run -d --name fb-bot \
   fb-bot:latest \
   --user-data-dir /profile \
   --telegram \
-  --poll-interval 6 \
-  --verbose \
-  --only-chat-id 123456789
+  --poll-interval 10 \
+  --verbose
 ```
 
 One-off poll (foreground, removed on exit):
@@ -100,7 +99,7 @@ docker run --rm \
 | Mount | Purpose |
 |-------|---------|
 | `/profile` | Persistent Chromium session (Facebook login) — mount `./.browser-profile` |
-| `/data` | SQLite chat policy DB (`fb-bot.sqlite`, listing cache) |
+| `/data` | Unified SQLite DB (`fb-bot.sqlite`: chat policy, Telegram pending, listing cache) |
 
 ## Notes
 

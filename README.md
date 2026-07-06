@@ -28,7 +28,7 @@ src/
 
 | File | Role |
 |------|------|
-| `main.py` | Parses flags, loads `.env`, constructs `MarketplaceSession`, `ChatStore`, agent clients, and `BotOrchestrator`. No business rules. |
+| `main.py` | Parses flags, loads `.env`, constructs `MarketplaceSession`, `Database`/`ChatPolicy`/`ListingCache`, agent clients, and `BotOrchestrator`. No business rules. |
 | `orchestrator.py` | Owns the poll loop and every branch after a buyer message is detected. Calls into the four packages but contains no scraping or prompt logic itself. |
 | `adapters.py` | Boundary between extraction types (`ChatDetail`, `ListingDetail`) and agent types (`ReplyContext`). Keeps `fb_agent` free of Playwright imports. |
 
@@ -43,18 +43,20 @@ Owns everything that touches the browser.
 - Persistent Chromium profile (`--user-data-dir`)
 - `list_chats`, `get_chat`, `get_listing`, `send_message`
 - DOM scraping, URL normalization, relative timestamp parsing
-- Internal listing SQLite cache (6h TTL, not part of public API)
 - Standalone CLI: `fb-marketplace inbox|chat|listing`
 
 Does **not** know about LLMs, Telegram, or chat policy.
 
 ### `fb_store` — Policy and memory
 
-Owns durable chat state in `./data/fb-bot.sqlite`.
+Owns durable state in a single SQLite DB (`./data/fb-bot.sqlite` via `FB_STORE_PATH`).
 
 - **Blacklist** — chats the bot must never touch again (hand-off, human override)
 - **Outbound log** — latest message the bot sent per chat
+- **Listing cache** — scraped listing payloads (6h TTL, lazy expiry)
+- **Telegram pending** — disk-backed seller-input state (`waiting_telegram`, pending context/classification JSON)
 - **`should_allow_agentic_response()`** — gate before any LLM call:
+  - waiting on seller Telegram reply → deny
   - blacklisted → deny
   - latest message not from buyer → deny
   - seller message not matching bot outbound → deny (human took over)
@@ -106,9 +108,7 @@ flowchart TD
     unread -->|no| sleep(["Sleep until next poll"])
     unread -->|yes| each_chat["For each candidate chat"]
 
-    each_chat --> waiting{"Waiting on seller Telegram reply?"}
-    waiting -->|yes| skip1["Skip chat"]
-    waiting -->|no| fetch["get_chat and get_listing"]
+    each_chat --> fetch["get_chat and get_listing"]
 
     fetch --> gate{"fb_store should_allow_agentic_response"}
     gate -->|denied| skip2["Skip blacklisted or human override"]
@@ -128,13 +128,12 @@ flowchart TD
 
     action -->|need_seller_input| summ1["fb_agent handoff_summarizer"]
     summ1 --> tg_more["fb_telegram MORE INFO NEEDED"]
-    tg_more --> pending_map["Store pending chat to Telegram msg"]
+    tg_more --> pending_map["fb_store mark_waiting_telegram"]
 
     action -->|hand_off| handoff_path
     handoff_path --> tg_handoff["fb_telegram HAND_OFF"]
     tg_handoff --> blacklist["fb_store blacklist_chat"]
 
-    skip1 --> sleep
     skip2 --> sleep
     skip3 --> sleep
     log1 --> sleep
@@ -148,7 +147,7 @@ flowchart TD
 | Classifier result | What happens |
 |-------------------|--------------|
 | **auto_reply** | LLM writes a buyer message → sent via Playwright → outbound logged. Chat stays active for future turns. |
-| **need_seller_input** | Summarized to Telegram with chat link. Seller replies on Telegram → `seller_input_responder` drafts answer → sent to buyer. Chat stays active; pending state held in orchestrator memory. |
+| **need_seller_input** | Summarized to Telegram with chat link. Seller replies on Telegram → `seller_input_responder` drafts answer → sent to buyer. Chat stays active; pending state persisted in SQLite until consumed. |
 | **hand_off** | Summarized to Telegram with chat link. Chat is **blacklisted** — bot never auto-replies again (pickup scheduling, phone requests, etc.). |
 
 ### Human override (implicit branch)
@@ -164,7 +163,19 @@ If the seller types directly in the Facebook UI, the next poll sees a seller mes
 | Telegram | `.env` (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`) — see [src/fb_telegram/TELEGRAM_SETUP.md](src/fb_telegram/TELEGRAM_SETUP.md) |
 | Seller persona + negotiation | [src/fb_agent/agent.yaml](src/fb_agent/agent.yaml) |
 | Prompts | [src/fb_agent/prompts.yaml](src/fb_agent/prompts.yaml) |
-| Chat policy DB | `./data/fb-bot.sqlite` (gitignored) |
+| Chat policy + listing cache DB | `./data/fb-bot.sqlite` (`FB_STORE_PATH`, gitignored) |
+
+## Development
+
+Use a local virtual environment (`.venv` is gitignored):
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ./src/fb_marketplace -e ./src/fb_store -e ./src/fb_agent -e ./src/fb_telegram -e ./src/fb_marketplace_mock -e .
+```
+
+Or run `./scripts/setup_venv.sh` to create `.venv` and install editable packages in one step.
 
 ## Quick start
 

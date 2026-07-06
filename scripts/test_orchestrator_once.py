@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from adapters import build_reply_context
 from fb_agent import AgentConfig, ReplyContext
 from fb_marketplace import ChatDetail, ChatMessage, ChatSummary, ListingDetail, MessageSender
-from fb_store import ChatStore
+from fb_store import ChatPolicy, Database
 from orchestrator import BotOrchestrator
 
 
@@ -75,7 +75,8 @@ class MockSession:
 
 async def test_store_gate_and_delay() -> None:
     with tempfile.TemporaryDirectory() as tmp:
-        store = ChatStore(Path(tmp) / "test.sqlite")
+        db = Database(Path(tmp) / "test.sqlite")
+        store = ChatPolicy(db)
         session = MockSession()
 
         chat = await session.get_chat("chat-1")
@@ -87,7 +88,7 @@ async def test_store_gate_and_delay() -> None:
         print("OK store gate + adapter")
 
         orchestrator = BotOrchestrator(
-            store=store,
+            chat_policy=store,
             agent_config=AgentConfig.from_env(),
             responder=MagicMock(),
             seller_input=MagicMock(),

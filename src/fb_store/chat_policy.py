@@ -1,25 +1,9 @@
 from __future__ import annotations
 
-import os
-import sqlite3
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Protocol, Sequence, runtime_checkable
 
-
-DEFAULT_DB_PATH = Path("./data/fb-bot.sqlite")
-
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS chats (
-    chat_id TEXT PRIMARY KEY NOT NULL,
-    blacklisted INTEGER NOT NULL DEFAULT 0,
-    latest_outbound_text TEXT
-);
-"""
-
-
-def _default_db_path() -> Path:
-    return Path(os.environ.get("FB_STORE_PATH", DEFAULT_DB_PATH))
+from .database import Database
 
 
 def _is_seller(sender: object) -> bool:
@@ -52,25 +36,18 @@ class AgenticAccessDecision:
     reason: str
 
 
-class ChatStore:
-    """SQLite persistence for chat blacklist and latest bot outbound message."""
+@dataclass(frozen=True)
+class ConsumedTelegramReply:
+    chat_id: str
+    pending_context: str
+    pending_classification: str
 
-    def __init__(self, db_path: str | Path | None = None) -> None:
-        self._db_path = Path(db_path) if db_path is not None else _default_db_path()
-        self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(self._db_path)
-        self._conn.row_factory = sqlite3.Row
-        self._conn.executescript(_SCHEMA)
-        self._conn.commit()
 
-    def close(self) -> None:
-        self._conn.close()
+class ChatPolicy:
+    """Chat blacklist, outbound log, reply gate, and Telegram pending state."""
 
-    def __enter__(self) -> ChatStore:
-        return self
-
-    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
-        self.close()
+    def __init__(self, db: Database) -> None:
+        self._db = db
 
     def is_allowed(self, chat_id: str) -> bool:
         return not self.is_blacklisted(chat_id)
@@ -78,59 +55,83 @@ class ChatStore:
     def blacklist_chat(self, chat_id: str, *, reason: str = "manual") -> None:
         """Permanently skip a chat. Reason is for callers only; not stored."""
         _ = reason
-        self._conn.execute(
-            """
-            INSERT INTO chats (chat_id, blacklisted)
-            VALUES (?, 1)
-            ON CONFLICT(chat_id) DO UPDATE SET blacklisted = 1
-            """,
-            (chat_id,),
-        )
-        self._conn.commit()
+        self._db.upsert_blacklisted(chat_id)
 
     def is_blacklisted(self, chat_id: str) -> bool:
-        row = self._conn.execute(
-            "SELECT blacklisted FROM chats WHERE chat_id = ?",
-            (chat_id,),
-        ).fetchone()
+        row = self._db.get_chat_row(chat_id)
         return bool(row and row["blacklisted"])
 
     def record_outbound(self, chat_id: str, text: str) -> None:
-        """Record the latest bot-sent message for a chat."""
-        self._conn.execute(
-            """
-            INSERT INTO chats (chat_id, latest_outbound_text)
-            VALUES (?, ?)
-            ON CONFLICT(chat_id) DO UPDATE SET latest_outbound_text = excluded.latest_outbound_text
-            """,
-            (chat_id, text),
-        )
-        self._conn.commit()
+        self._db.upsert_latest_outbound(chat_id, text)
 
     def log_outbound(self, message: OutboundMessage) -> None:
         self.record_outbound(message.chat_id, message.text)
 
     def get_last_outbound(self, chat_id: str) -> OutboundMessage | None:
-        row = self._conn.execute(
-            "SELECT latest_outbound_text FROM chats WHERE chat_id = ?",
-            (chat_id,),
-        ).fetchone()
+        row = self._db.get_chat_row(chat_id)
         if row is None or not row["latest_outbound_text"]:
             return None
         return OutboundMessage(chat_id=chat_id, text=row["latest_outbound_text"])
 
     def has_logged_outbound(self, chat_id: str, text: str) -> bool:
-        row = self._conn.execute(
-            "SELECT latest_outbound_text FROM chats WHERE chat_id = ?",
-            (chat_id,),
-        ).fetchone()
+        row = self._db.get_chat_row(chat_id)
         return bool(row and row["latest_outbound_text"] == text)
+
+    def has_waiting_telegram(self) -> bool:
+        return self._db.count_waiting_telegram() > 0
+
+    def mark_waiting_telegram(
+        self,
+        chat_id: str,
+        message_id: int,
+        context_json: str,
+        classification_json: str,
+    ) -> None:
+        self._db.set_pending_telegram(chat_id, message_id, context_json, classification_json)
+
+    def consume_telegram_reply(
+        self,
+        telegram_message_id: int | None,
+    ) -> ConsumedTelegramReply | None:
+        conn = self._db.conn
+        with conn:
+            if telegram_message_id is not None:
+                row = self._db.get_chat_row_by_telegram_message_id(telegram_message_id)
+            else:
+                waiting = self._db.list_waiting_telegram_rows()
+                row = waiting[0] if len(waiting) == 1 else None
+
+            if row is None or not row["pending_context"] or not row["pending_classification"]:
+                return None
+
+            chat_id = row["chat_id"]
+            conn.execute(
+                """
+                UPDATE chats SET
+                    waiting_telegram = 0,
+                    telegram_message_id = NULL,
+                    pending_context = NULL,
+                    pending_classification = NULL
+                WHERE chat_id = ?
+                """,
+                (chat_id,),
+            )
+
+        return ConsumedTelegramReply(
+            chat_id=chat_id,
+            pending_context=row["pending_context"],
+            pending_classification=row["pending_classification"],
+        )
 
     def should_allow_agentic_response(
         self,
         chat_id: str,
         messages: Sequence[ChatMessageLike],
     ) -> AgenticAccessDecision:
+        row = self._db.get_chat_row(chat_id)
+        if row is not None and row["waiting_telegram"]:
+            return AgenticAccessDecision(False, "waiting_telegram")
+
         if self.is_blacklisted(chat_id):
             return AgenticAccessDecision(False, "blacklisted")
 

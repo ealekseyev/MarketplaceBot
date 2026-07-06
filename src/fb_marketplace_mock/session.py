@@ -3,15 +3,15 @@ from __future__ import annotations
 import logging
 import re
 
+from fb_marketplace.helpers import normalize_facebook_url, normalize_listing_url
+from fb_marketplace.models import ChatDetail, ChatSummary, ListingDetail, SessionConfig
+
 from .client import FacebookMarketplaceClient, ListingCacheLike
-from .helpers import normalize_facebook_url, normalize_listing_url
-from .models import ChatDetail, ChatSummary, ListingDetail, SessionConfig
 
 logger = logging.getLogger(__name__)
 
 
 def _normalize_listing_reference(listing_url_or_id: str) -> str:
-    """Accept a marketplace item id or URL and return a fetchable URL."""
     stripped = listing_url_or_id.strip()
     if re.fullmatch(r"\d+", stripped):
         return f"https://www.facebook.com/marketplace/item/{stripped}"
@@ -22,7 +22,7 @@ def _normalize_listing_reference(listing_url_or_id: str) -> str:
 
 
 class MarketplaceSession:
-    """Thin async wrapper over FacebookMarketplaceClient."""
+    """Thin async wrapper over mock FacebookMarketplaceClient."""
 
     def __init__(
         self,
@@ -33,7 +33,7 @@ class MarketplaceSession:
         self._client = FacebookMarketplaceClient(config, listing_cache=listing_cache)
 
     async def __aenter__(self) -> MarketplaceSession:
-        logger.debug("MarketplaceSession: starting client")
+        logger.debug("MarketplaceSession: starting mock client")
         await self._client.start()
         return self
 
@@ -41,7 +41,7 @@ class MarketplaceSession:
         await self.close()
 
     async def close(self) -> None:
-        logger.debug("MarketplaceSession: closing client")
+        logger.debug("MarketplaceSession: closing mock client")
         await self._client.close()
 
     async def list_chats(self, limit: int | None = None) -> list[ChatSummary]:

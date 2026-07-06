@@ -1,0 +1,19 @@
+[project]
+name = "fb-marketplace-mock"
+version = "0.1.0"
+description = "Mock Facebook Marketplace for local development"
+requires-python = ">=3.11"
+dependencies = [
+  "fb-marketplace",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"fb_marketplace_mock" = "."}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["fb_marketplace_mock*"]

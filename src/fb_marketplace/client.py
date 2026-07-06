@@ -5,7 +5,7 @@ import logging
 import re
 from dataclasses import replace
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol
 
 from playwright.async_api import (
     BrowserContext,
@@ -28,7 +28,6 @@ from .helpers import (
     parse_listing_location,
     parse_marketplace_threads_from_graphql,
 )
-from .listing_cache import ListingCache
 from .models import ChatDetail, ChatMessage, ChatSummary, ListingDetail, MessageSender, SessionConfig
 from .timeparse import age_seconds, first_timestamp_in_text, parse_relative_timestamp
 
@@ -143,18 +142,24 @@ _LISTING_LINK_SELECTOR = 'a[href*="/marketplace/item/"]'
 _HEADING_SELECTOR = 'h1, h2, h3, [role="heading"]'
 
 
+class ListingCacheLike(Protocol):
+    def get(self, listing_id: str) -> dict[str, Any] | None: ...
+
+    def put(self, listing_id: str, payload: dict[str, Any]) -> None: ...
+
+
 class FacebookMarketplaceClient:
-    def __init__(self, config: SessionConfig) -> None:
+    def __init__(
+        self,
+        config: SessionConfig,
+        *,
+        listing_cache: ListingCacheLike | None = None,
+    ) -> None:
         self._config = config
         self._playwright: Playwright | None = None
         self._context: BrowserContext | None = None
         self._page: Page | None = None
-        self._listing_cache: ListingCache | None = None
-
-    def _get_listing_cache(self) -> ListingCache:
-        if self._listing_cache is None:
-            self._listing_cache = ListingCache()
-        return self._listing_cache
+        self._listing_cache = listing_cache
 
     async def __aenter__(self) -> "FacebookMarketplaceClient":
         await self.start()
@@ -209,9 +214,6 @@ class FacebookMarketplaceClient:
         self._page = page
 
     async def close(self) -> None:
-        if self._listing_cache is not None:
-            self._listing_cache.close()
-            self._listing_cache = None
         if self._page is not None:
             try:
                 await self._page.goto("about:blank", wait_until="commit", timeout=2_000)
@@ -474,15 +476,16 @@ class FacebookMarketplaceClient:
             raise ValueError("listing_url must be non-empty")
 
         listing_id = extract_listing_id(normalized_url)
-        if listing_id:
-            cached = self._get_listing_cache().get(listing_id)
+        if listing_id and self._listing_cache is not None:
+            cached = self._listing_cache.get(listing_id)
             if cached is not None:
+                detail = ListingDetail.from_dict(cached)
                 logger.info(
                     "get_listing: cache hit for %s (title=%r)",
                     listing_id,
-                    cached.title,
+                    detail.title,
                 )
-                return cached
+                return detail
             logger.debug("get_listing: cache miss for %s", listing_id)
 
         page = self._require_page()
@@ -514,8 +517,8 @@ class FacebookMarketplaceClient:
             location_city=location_city,
             location_state=location_state,
         )
-        if listing_id:
-            self._get_listing_cache().put(listing_id, detail)
+        if listing_id and self._listing_cache is not None:
+            self._listing_cache.put(listing_id, detail.to_dict())
             logger.debug("get_listing: cached %s", listing_id)
         return detail
 
